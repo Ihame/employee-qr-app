@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Employee QR Code Generator</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+	<h1>Employee QR Code Generator</h1>
+	<p class="subtitle">Type an employee's details, generate a QR code with your logo in the middle, and save it for later editing.</p>
+</header>
+
+<main>
+	<section class="panel form-panel">
+		<h2 id="form-title">New employee</h2>
+		<form id="employee-form">
+			<label for="input-name">Full name <span class="req">*</span></label>
+			<input type="text" id="input-name" placeholder="e.g. Jane Uwase" required>
+
+			<label for="input-id">Employee ID <span class="hint">(leave blank to auto-generate)</span></label>
+			<input type="text" id="input-id" placeholder="e.g. EMP-0001">
+
+			<label for="input-department">Department <span class="hint">(optional)</span></label>
+			<input type="text" id="input-department" placeholder="e.g. Sales">
+
+			<label for="input-phone">Phone number <span class="hint">(optional)</span></label>
+			<input type="tel" id="input-phone" placeholder="e.g. +250 788 123 456">
+
+			<div class="button-row">
+				<button type="submit" id="btn-generate">Generate QR code</button>
+				<button type="button" id="btn-clear">New / Clear</button>
+			</div>
+			<input type="hidden" id="input-record-id">
+		</form>
+
+		<div class="logo-box">
+			<h3>Center logo</h3>
+			<p class="hint">Uploaded once, reused on every QR code.</p>
+			<div class="logo-controls">
+				<label class="upload-btn">
+					Upload logo
+					<input type="file" id="input-logo" accept="image/*" hidden>
+				</label>
+				<button type="button" id="btn-remove-logo" class="secondary">Remove logo</button>
+				<img id="logo-preview" alt="Logo preview" hidden>
+			</div>
+		</div>
+	</section>
+
+	<section class="panel preview-panel">
+		<h2>Preview</h2>
+		<div class="canvas-wrap">
+			<canvas id="qr-canvas" width="640" height="640"></canvas>
+		</div>
+		<div class="button-row">
+			<button type="button" id="btn-download">Download PNG</button>
+		</div>
+		<p class="hint" id="qr-status"></p>
+	</section>
+
+	<section class="panel list-panel">
+		<h2>Saved employees</h2>
+		<input type="search" id="search-box" placeholder="Search by name, ID or department...">
+		<table id="employee-table">
+			<thead>
+				<tr>
+					<th>Name</th>
+					<th>Employee ID</th>
+					<th>Department</th>
+					<th>Updated</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody id="employee-table-body"></tbody>
+		</table>
+		<p class="hint" id="empty-message">No employees saved yet.</p>
+		<div class="button-row">
+			<button type="button" id="btn-export" class="secondary">Export backup (.json)</button>
+			<label class="upload-btn secondary">
+				Import backup
+				<input type="file" id="input-import" accept="application/json" hidden>
+			</label>
+		</div>
+		<p class="hint">Saved data lives in this browser only. Use "Export backup" now and then to keep a copy safe.</p>
+	</section>
+</main>
+
+<script src="qrcodegen.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,215 @@
+:root {
+	--bg: #f4f6f8;
+	--panel: #ffffff;
+	--border: #dde2e7;
+	--text: #1c2430;
+	--text-muted: #667080;
+	--accent: #1e7a4c;
+	--accent-hover: #17603b;
+	--danger: #b8342f;
+	--danger-hover: #962a26;
+	--radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+	margin: 0;
+	font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+	background: var(--bg);
+	color: var(--text);
+}
+
+header {
+	padding: 24px 32px 8px;
+}
+
+header h1 {
+	margin: 0 0 4px;
+	font-size: 1.6rem;
+}
+
+.subtitle {
+	color: var(--text-muted);
+	margin: 0;
+}
+
+main {
+	display: grid;
+	grid-template-columns: 360px 360px 1fr;
+	gap: 20px;
+	padding: 20px 32px 40px;
+	align-items: start;
+}
+
+@media (max-width: 1100px) {
+	main { grid-template-columns: 1fr; }
+}
+
+.panel {
+	background: var(--panel);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	padding: 20px;
+}
+
+.panel h2 {
+	margin-top: 0;
+	font-size: 1.1rem;
+}
+
+label {
+	display: block;
+	font-weight: 600;
+	font-size: 0.85rem;
+	margin: 14px 0 4px;
+}
+
+label:first-of-type { margin-top: 0; }
+
+.req { color: var(--danger); }
+
+.hint {
+	font-weight: 400;
+	color: var(--text-muted);
+	font-size: 0.8rem;
+}
+
+input[type=text], input[type=search] {
+	width: 100%;
+	padding: 9px 10px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	font-size: 0.95rem;
+	background: #fbfcfd;
+}
+
+input[type=text]:focus, input[type=search]:focus {
+	outline: 2px solid var(--accent);
+	outline-offset: 0;
+}
+
+.button-row {
+	display: flex;
+	gap: 10px;
+	margin-top: 16px;
+	flex-wrap: wrap;
+}
+
+button, .upload-btn {
+	background: var(--accent);
+	color: white;
+	border: none;
+	padding: 9px 16px;
+	border-radius: 8px;
+	font-size: 0.9rem;
+	font-weight: 600;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+}
+
+button:hover, .upload-btn:hover {
+	background: var(--accent-hover);
+}
+
+button.secondary, .upload-btn.secondary {
+	background: #eef1f4;
+	color: var(--text);
+}
+
+button.secondary:hover, .upload-btn.secondary:hover {
+	background: #e0e5ea;
+}
+
+button.danger {
+	background: var(--danger);
+}
+
+button.danger:hover {
+	background: var(--danger-hover);
+}
+
+.logo-box {
+	margin-top: 24px;
+	padding-top: 16px;
+	border-top: 1px solid var(--border);
+}
+
+.logo-box h3 {
+	margin: 0 0 2px;
+	font-size: 0.95rem;
+}
+
+.logo-controls {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 10px;
+	flex-wrap: wrap;
+}
+
+#logo-preview {
+	width: 44px;
+	height: 44px;
+	object-fit: contain;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 2px;
+	background: white;
+}
+
+.canvas-wrap {
+	display: flex;
+	justify-content: center;
+	background: #fbfcfd;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 12px;
+}
+
+#qr-canvas {
+	width: 100%;
+	max-width: 320px;
+	height: auto;
+	image-rendering: pixelated;
+}
+
+#search-box {
+	margin-bottom: 12px;
+}
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.88rem;
+}
+
+th, td {
+	text-align: left;
+	padding: 8px 6px;
+	border-bottom: 1px solid var(--border);
+}
+
+th {
+	color: var(--text-muted);
+	font-weight: 600;
+	font-size: 0.78rem;
+	text-transform: uppercase;
+}
+
+td.row-actions {
+	display: flex;
+	gap: 6px;
+	white-space: nowrap;
+}
+
+td.row-actions button {
+	padding: 5px 9px;
+	font-size: 0.78rem;
+}
+
+#empty-message {
+	text-align: center;
+	padding: 16px 0;
+}
