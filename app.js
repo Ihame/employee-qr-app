@@ -1,75 +1,123 @@
 "use strict";
 
-const STORAGE_KEY = "employeeQr.records";
-const LOGO_KEY = "employeeQr.logo";
+// Public by design: this is the anon key, meant to be embedded in frontend
+// code. Direct table access for this role is locked down by RLS (no
+// policies) — all reads/writes go through the edge functions below, which
+// use the service-role key server-side.
+const SUPABASE_URL = "https://niqntideqrkgqvqlcaxl.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5pcW50aWRlcXJrZ3F2cWxjYXhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5NzM3OTIsImV4cCI6MjEwNTU0OTc5Mn0.EWu51cvzX84slKnunS5p6DdnfuR9N7yQX4yVs_luDpY";
+const FUNCTIONS_BASE = SUPABASE_URL + "/functions/v1";
 
-/** @type {Array<{recordId:string, name:string, employeeId:string, department:string, phone:string, updatedAt:string}>} */
-let records = loadRecords();
-let logoDataUrl = localStorage.getItem(LOGO_KEY) || "";
+async function apiFetch(path, options) {
+	const res = await fetch(FUNCTIONS_BASE + path, {
+		...options,
+		headers: {
+			"apikey": SUPABASE_ANON_KEY,
+			"Authorization": "Bearer " + SUPABASE_ANON_KEY,
+			"Content-Type": "application/json",
+			...(options && options.headers),
+		},
+	});
+	let data = null;
+	try { data = await res.json(); } catch (e) { /* empty body */ }
+	if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
+	return data;
+}
+
+const api = {
+	listEmployees: () => apiFetch("/employees"),
+	createEmployee: (payload) => apiFetch("/employees", { method: "POST", body: JSON.stringify(payload) }),
+	updateEmployee: (payload) => apiFetch("/employees", { method: "PUT", body: JSON.stringify(payload) }),
+	deleteEmployee: (id) => apiFetch("/employees?id=" + encodeURIComponent(id), { method: "DELETE" }),
+	getLogo: () => apiFetch("/settings"),
+	setLogo: (logo) => apiFetch("/settings", { method: "PUT", body: JSON.stringify({ logo }) }),
+	removeLogo: () => apiFetch("/settings", { method: "DELETE" }),
+};
+
+let records = [];
+let logoDataUrl = "";
 
 const els = {
 	form: document.getElementById("employee-form"),
 	formTitle: document.getElementById("form-title"),
+	formError: document.getElementById("form-error"),
 	name: document.getElementById("input-name"),
 	id: document.getElementById("input-id"),
 	department: document.getElementById("input-department"),
 	phone: document.getElementById("input-phone"),
 	recordId: document.getElementById("input-record-id"),
 	btnClear: document.getElementById("btn-clear"),
+	btnGenerate: document.getElementById("btn-generate"),
 	btnDownload: document.getElementById("btn-download"),
 	canvas: document.getElementById("qr-canvas"),
+	canvasEmptyHint: document.getElementById("canvas-empty-hint"),
 	qrStatus: document.getElementById("qr-status"),
 	logoInput: document.getElementById("input-logo"),
 	logoPreview: document.getElementById("logo-preview"),
 	btnRemoveLogo: document.getElementById("btn-remove-logo"),
+	btnRefresh: document.getElementById("btn-refresh"),
 	searchBox: document.getElementById("search-box"),
 	tableBody: document.getElementById("employee-table-body"),
 	emptyMessage: document.getElementById("empty-message"),
+	listError: document.getElementById("list-error"),
 	btnExport: document.getElementById("btn-export"),
 	importInput: document.getElementById("input-import"),
+	syncBadge: document.getElementById("sync-badge"),
+	syncBadgeText: document.getElementById("sync-badge-text"),
+	toastContainer: document.getElementById("toast-container"),
+	confirmOverlay: document.getElementById("confirm-overlay"),
+	confirmMessage: document.getElementById("confirm-message"),
+	confirmOk: document.getElementById("confirm-ok"),
+	confirmCancel: document.getElementById("confirm-cancel"),
 };
 
-function loadRecords() {
-	try {
-		const raw = localStorage.getItem(STORAGE_KEY);
-		return raw ? JSON.parse(raw) : [];
-	} catch (e) {
-		console.error("Could not read saved employees, starting fresh.", e);
-		return [];
-	}
+// ---------- UI helpers ----------
+
+function showToast(message, type = "info") {
+	const toast = document.createElement("div");
+	toast.className = "toast " + type;
+	toast.textContent = message;
+	els.toastContainer.appendChild(toast);
+	setTimeout(() => toast.remove(), 4000);
 }
 
-function saveRecords() {
-	localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+function confirmDialog(message) {
+	els.confirmMessage.textContent = message;
+	els.confirmOverlay.hidden = false;
+	return new Promise((resolve) => {
+		const cleanup = (result) => {
+			els.confirmOverlay.hidden = true;
+			els.confirmOk.removeEventListener("click", onOk);
+			els.confirmCancel.removeEventListener("click", onCancel);
+			resolve(result);
+		};
+		const onOk = () => cleanup(true);
+		const onCancel = () => cleanup(false);
+		els.confirmOk.addEventListener("click", onOk);
+		els.confirmCancel.addEventListener("click", onCancel);
+	});
 }
 
-function makeId() {
-	if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
-	return "id-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+function setSyncBadge(state, text) {
+	els.syncBadge.className = "sync-badge " + state;
+	els.syncBadgeText.textContent = text;
 }
 
-function generateEmployeeId(excludeRecordId) {
-	const used = new Set(
-		records.filter(r => r.recordId !== excludeRecordId).map(r => r.employeeId)
-	);
-	let n = records.length + 1;
-	let candidate;
-	do {
-		candidate = "EMP-" + String(n).padStart(4, "0");
-		n++;
-	} while (used.has(candidate));
-	return candidate;
+function setBusy(button, busy) {
+	button.disabled = busy;
+	const spinner = button.querySelector(".spinner");
+	const label = button.querySelector(".btn-label");
+	if (spinner) spinner.hidden = !busy;
+	if (label && button.dataset.idleLabel === undefined) button.dataset.idleLabel = label.textContent;
+	if (label) label.textContent = busy ? "Saving…" : button.dataset.idleLabel;
 }
 
 // ---------- QR rendering ----------
 
-// Escapes text for use inside a vCard field value, per RFC 6350.
 function vCardEscape(value) {
 	return value.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\n/g, "\\n");
 }
 
-// Encodes just the name and phone number as a vCard, so scanning the QR code
-// with a phone's camera offers to save/show a contact card, not raw text.
 function computeQrText(rec) {
 	const lines = ["BEGIN:VCARD", "VERSION:3.0", `FN:${vCardEscape(rec.name)}`];
 	if (rec.department) lines.push(`ORG:${vCardEscape(rec.department)}`);
@@ -118,10 +166,13 @@ async function renderQr(text) {
 	const canvas = els.canvas;
 	const ctx = canvas.getContext("2d");
 	if (!text.trim()) {
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		canvas.hidden = true;
+		els.canvasEmptyHint.hidden = false;
 		els.qrStatus.textContent = "";
 		return;
 	}
+	canvas.hidden = false;
+	els.canvasEmptyHint.hidden = true;
 	let qr;
 	try {
 		qr = qrcodegen.QrCode.encodeText(text, qrcodegen.QrCode.Ecc.HIGH);
@@ -175,46 +226,36 @@ function clearForm() {
 	els.form.reset();
 	els.recordId.value = "";
 	els.formTitle.textContent = "New employee";
+	els.formError.hidden = true;
 	renderQr("");
 }
 
-els.form.addEventListener("submit", (e) => {
+els.form.addEventListener("submit", async (e) => {
 	e.preventDefault();
-	const name = els.name.value.trim();
-	if (!name) return;
+	els.formError.hidden = true;
+	const rec = currentFormRecord();
+	if (!rec.name) return;
 
-	let recordId = els.recordId.value;
-	const isNew = !recordId;
-	if (isNew) recordId = makeId();
+	setBusy(els.btnGenerate, true);
+	try {
+		const isNew = !rec.recordId;
+		const saved = isNew ? await api.createEmployee(rec) : await api.updateEmployee(rec);
+		const idx = records.findIndex(r => r.recordId === saved.recordId);
+		if (idx >= 0) records[idx] = saved;
+		else records.push(saved);
 
-	let employeeId = els.id.value.trim();
-	const duplicate = records.find(r => r.recordId !== recordId && r.employeeId.toLowerCase() === employeeId.toLowerCase());
-	if (!employeeId) {
-		employeeId = generateEmployeeId(recordId);
-	} else if (duplicate) {
-		alert(`Employee ID "${employeeId}" is already used by ${duplicate.name}. Please use a different ID.`);
-		return;
+		els.recordId.value = saved.recordId;
+		els.id.value = saved.employeeId;
+		els.formTitle.textContent = `Editing: ${saved.name}`;
+		renderQr(computeQrText(saved));
+		renderTable(saved.recordId);
+		showToast(isNew ? `Saved ${saved.name}.` : `Updated ${saved.name}.`, "success");
+	} catch (err) {
+		els.formError.textContent = err.message;
+		els.formError.hidden = false;
+	} finally {
+		setBusy(els.btnGenerate, false);
 	}
-
-	const rec = {
-		recordId,
-		name,
-		employeeId,
-		department: els.department.value.trim(),
-		phone: els.phone.value.trim(),
-		updatedAt: new Date().toISOString(),
-	};
-
-	const idx = records.findIndex(r => r.recordId === recordId);
-	if (idx >= 0) records[idx] = rec;
-	else records.push(rec);
-
-	saveRecords();
-	els.recordId.value = recordId;
-	els.id.value = employeeId;
-	els.formTitle.textContent = `Editing: ${name}`;
-	renderQr(computeQrText(rec));
-	renderTable();
 });
 
 els.btnClear.addEventListener("click", clearForm);
@@ -226,7 +267,7 @@ els.btnClear.addEventListener("click", clearForm);
 els.btnDownload.addEventListener("click", () => {
 	const rec = currentFormRecord();
 	if (!rec.name) {
-		alert("Generate a QR code first (enter a name).");
+		showToast("Enter a name and generate a QR code first.", "error");
 		return;
 	}
 	const filename = (rec.employeeId || rec.name).replace(/[^a-z0-9-_]+/gi, "_") + "-qr.png";
@@ -252,26 +293,32 @@ els.logoInput.addEventListener("change", () => {
 	const file = els.logoInput.files[0];
 	if (!file) return;
 	const reader = new FileReader();
-	reader.onload = () => {
-		logoDataUrl = reader.result;
+	reader.onload = async () => {
+		const newLogo = reader.result;
 		try {
-			localStorage.setItem(LOGO_KEY, logoDataUrl);
-		} catch (e) {
-			alert("This logo image is too large to save in the browser. Try a smaller image.");
-			logoDataUrl = localStorage.getItem(LOGO_KEY) || "";
+			await api.setLogo(newLogo);
+			logoDataUrl = newLogo;
+			applyLogoPreview();
+			refreshPreview();
+			showToast("Logo updated for everyone.", "success");
+		} catch (err) {
+			showToast("Could not save logo: " + err.message, "error");
 		}
-		applyLogoPreview();
-		refreshPreview();
 	};
 	reader.readAsDataURL(file);
 });
 
-els.btnRemoveLogo.addEventListener("click", () => {
-	logoDataUrl = "";
-	localStorage.removeItem(LOGO_KEY);
-	els.logoInput.value = "";
-	applyLogoPreview();
-	refreshPreview();
+els.btnRemoveLogo.addEventListener("click", async () => {
+	try {
+		await api.removeLogo();
+		logoDataUrl = "";
+		els.logoInput.value = "";
+		applyLogoPreview();
+		refreshPreview();
+		showToast("Logo removed for everyone.", "success");
+	} catch (err) {
+		showToast("Could not remove logo: " + err.message, "error");
+	}
 });
 
 // ---------- Table / list ----------
@@ -282,7 +329,25 @@ function formatDate(iso) {
 	return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-function renderTable() {
+function showTableSkeleton() {
+	els.tableBody.innerHTML = "";
+	els.emptyMessage.hidden = true;
+	els.listError.hidden = true;
+	for (let i = 0; i < 3; i++) {
+		const tr = document.createElement("tr");
+		tr.className = "skeleton-row";
+		for (let c = 0; c < 5; c++) {
+			const td = document.createElement("td");
+			const bar = document.createElement("div");
+			bar.className = "skeleton-bar";
+			td.appendChild(bar);
+			tr.appendChild(td);
+		}
+		els.tableBody.appendChild(tr);
+	}
+}
+
+function renderTable(highlightId) {
 	const query = els.searchBox.value.trim().toLowerCase();
 	const filtered = records
 		.filter(r => !query ||
@@ -294,12 +359,13 @@ function renderTable() {
 	els.tableBody.innerHTML = "";
 	els.emptyMessage.hidden = records.length > 0;
 	els.emptyMessage.textContent = records.length === 0
-		? "No employees saved yet."
+		? "No employees saved yet. Add one on the left to get started."
 		: (filtered.length === 0 ? "No matches." : "");
 	if (records.length > 0) els.emptyMessage.hidden = filtered.length > 0;
 
 	for (const rec of filtered) {
 		const tr = document.createElement("tr");
+		if (rec.recordId === highlightId) tr.className = "new-row";
 
 		const tdName = document.createElement("td");
 		tdName.textContent = rec.name;
@@ -322,12 +388,14 @@ function renderTable() {
 
 		const editBtn = document.createElement("button");
 		editBtn.textContent = "Edit";
+		editBtn.type = "button";
 		editBtn.className = "secondary";
 		editBtn.addEventListener("click", () => loadIntoForm(rec.recordId));
 		tdActions.appendChild(editBtn);
 
 		const delBtn = document.createElement("button");
 		delBtn.textContent = "Delete";
+		delBtn.type = "button";
 		delBtn.className = "danger";
 		delBtn.addEventListener("click", () => deleteRecord(rec.recordId));
 		tdActions.appendChild(delBtn);
@@ -346,21 +414,49 @@ function loadIntoForm(recordId) {
 	els.department.value = rec.department;
 	els.phone.value = rec.phone;
 	els.formTitle.textContent = `Editing: ${rec.name}`;
+	els.formError.hidden = true;
 	renderQr(computeQrText(rec));
 	els.name.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-function deleteRecord(recordId) {
+async function deleteRecord(recordId) {
 	const rec = records.find(r => r.recordId === recordId);
 	if (!rec) return;
-	if (!confirm(`Delete "${rec.name}" (${rec.employeeId})? This cannot be undone.`)) return;
-	records = records.filter(r => r.recordId !== recordId);
-	saveRecords();
-	if (els.recordId.value === recordId) clearForm();
-	renderTable();
+	const ok = await confirmDialog(`Delete "${rec.name}" (${rec.employeeId})? This removes it for everyone and cannot be undone.`);
+	if (!ok) return;
+	try {
+		await api.deleteEmployee(recordId);
+		records = records.filter(r => r.recordId !== recordId);
+		if (els.recordId.value === recordId) clearForm();
+		renderTable();
+		showToast(`Deleted ${rec.name}.`, "success");
+	} catch (err) {
+		showToast("Could not delete: " + err.message, "error");
+	}
 }
 
-els.searchBox.addEventListener("input", renderTable);
+els.searchBox.addEventListener("input", () => renderTable());
+
+async function loadEmployees() {
+	showTableSkeleton();
+	try {
+		records = await api.listEmployees();
+		renderTable();
+	} catch (err) {
+		els.tableBody.innerHTML = "";
+		els.listError.textContent = "Could not load the saved list: " + err.message;
+		els.listError.hidden = false;
+		throw err;
+	}
+}
+
+els.btnRefresh.addEventListener("click", async () => {
+	els.btnRefresh.classList.add("spinning");
+	try {
+		await loadEmployees();
+	} catch (e) { /* already shown */ }
+	els.btnRefresh.classList.remove("spinning");
+});
 
 // ---------- Export / import ----------
 
@@ -379,35 +475,43 @@ els.importInput.addEventListener("change", () => {
 	const file = els.importInput.files[0];
 	if (!file) return;
 	const reader = new FileReader();
-	reader.onload = () => {
+	reader.onload = async () => {
 		try {
 			const data = JSON.parse(reader.result);
 			const incoming = Array.isArray(data.records) ? data.records : [];
-			if (!confirm(`Import ${incoming.length} employee(s)? Entries with a matching Employee ID will be updated; others will be added.`)) return;
-			for (const inc of incoming) {
-				if (!inc.name) continue;
-				const existingIdx = records.findIndex(r => r.employeeId && inc.employeeId && r.employeeId.toLowerCase() === inc.employeeId.toLowerCase());
-				const rec = {
-					recordId: existingIdx >= 0 ? records[existingIdx].recordId : makeId(),
-					name: inc.name,
-					employeeId: inc.employeeId || generateEmployeeId(""),
-					department: inc.department || "",
-					phone: inc.phone || "",
-					updatedAt: inc.updatedAt || new Date().toISOString(),
-				};
-				if (existingIdx >= 0) records[existingIdx] = rec;
-				else records.push(rec);
+			const named = incoming.filter(inc => inc.name);
+			const ok = await confirmDialog(`Import ${named.length} employee(s)? Entries with a matching Employee ID will be updated in the shared list; others will be added.`);
+			if (!ok) return;
+
+			let added = 0, updated = 0, failed = 0;
+			for (const inc of named) {
+				try {
+					const existing = records.find(r => r.employeeId && inc.employeeId && r.employeeId.toLowerCase() === inc.employeeId.toLowerCase());
+					const payload = {
+						recordId: existing ? existing.recordId : undefined,
+						name: inc.name,
+						employeeId: inc.employeeId || "",
+						department: inc.department || "",
+						phone: inc.phone || "",
+					};
+					const saved = existing ? await api.updateEmployee(payload) : await api.createEmployee(payload);
+					const idx = records.findIndex(r => r.recordId === saved.recordId);
+					if (idx >= 0) { records[idx] = saved; updated++; } else { records.push(saved); added++; }
+				} catch (e) {
+					failed++;
+				}
 			}
 			if (data.logoDataUrl && !logoDataUrl) {
-				logoDataUrl = data.logoDataUrl;
-				localStorage.setItem(LOGO_KEY, logoDataUrl);
-				applyLogoPreview();
+				try {
+					await api.setLogo(data.logoDataUrl);
+					logoDataUrl = data.logoDataUrl;
+					applyLogoPreview();
+				} catch (e) { /* ignore logo import failure */ }
 			}
-			saveRecords();
 			renderTable();
-			alert("Import complete.");
+			showToast(`Import complete: ${added} added, ${updated} updated${failed ? `, ${failed} failed` : ""}.`, failed ? "error" : "success");
 		} catch (e) {
-			alert("This file doesn't look like a valid backup.");
+			showToast("This file doesn't look like a valid backup.", "error");
 		}
 	};
 	reader.readAsText(file);
@@ -416,6 +520,20 @@ els.importInput.addEventListener("change", () => {
 
 // ---------- Init ----------
 
-applyLogoPreview();
-renderTable();
-clearForm();
+async function init() {
+	clearForm();
+	setSyncBadge("", "Connecting…");
+	try {
+		const [logoResult] = await Promise.all([
+			api.getLogo().catch(() => ({ logo: "" })),
+			loadEmployees(),
+		]);
+		logoDataUrl = logoResult.logo || "";
+		applyLogoPreview();
+		setSyncBadge("ok", "Connected");
+	} catch (err) {
+		setSyncBadge("error", "Offline — changes won't save");
+	}
+}
+
+init();

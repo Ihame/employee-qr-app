@@ -9,8 +9,15 @@
 <body>
 
 <header>
-	<h1>Employee QR Code Generator</h1>
-	<p class="subtitle">Type an employee's details, generate a QR code with your logo in the middle, and save it for later editing.</p>
+	<div class="header-inner">
+		<div>
+			<h1>Employee QR Code Generator</h1>
+			<p class="subtitle">Add an employee, generate a QR code with your logo in the middle, and share it. Everyone who opens this page sees the same saved list.</p>
+		</div>
+		<span class="sync-badge" id="sync-badge">
+			<span class="dot"></span> <span id="sync-badge-text">Connecting…</span>
+		</span>
+	</div>
 </header>
 
 <main>
@@ -30,17 +37,21 @@
 			<input type="tel" id="input-phone" placeholder="e.g. +250 788 123 456">
 
 			<div class="button-row">
-				<button type="submit" id="btn-generate">Generate QR code</button>
-				<button type="button" id="btn-clear">New / Clear</button>
+				<button type="submit" id="btn-generate">
+					<span class="btn-label">Save &amp; generate QR</span>
+					<span class="spinner" hidden></span>
+				</button>
+				<button type="button" id="btn-clear" class="secondary">New / Clear</button>
 			</div>
 			<input type="hidden" id="input-record-id">
+			<p class="field-error" id="form-error" hidden></p>
 		</form>
 
 		<div class="logo-box">
 			<h3>Center logo</h3>
-			<p class="hint">Uploaded once, reused on every QR code.</p>
+			<p class="hint">Shared with everyone using this app &mdash; uploading a new one replaces it for all.</p>
 			<div class="logo-controls">
-				<label class="upload-btn">
+				<label class="upload-btn secondary">
 					Upload logo
 					<input type="file" id="input-logo" accept="image/*" hidden>
 				</label>
@@ -54,29 +65,36 @@
 		<h2>Preview</h2>
 		<div class="canvas-wrap">
 			<canvas id="qr-canvas" width="640" height="640"></canvas>
+			<p class="empty-hint" id="canvas-empty-hint">Enter a name to preview the QR code</p>
 		</div>
 		<div class="button-row">
-			<button type="button" id="btn-download">Download PNG</button>
+			<button type="button" id="btn-download" class="secondary">Download PNG</button>
 		</div>
 		<p class="hint" id="qr-status"></p>
 	</section>
 
 	<section class="panel list-panel">
-		<h2>Saved employees</h2>
+		<div class="list-header">
+			<h2>Saved employees</h2>
+			<button type="button" id="btn-refresh" class="icon-btn" title="Refresh list" aria-label="Refresh list">⟳</button>
+		</div>
 		<input type="search" id="search-box" placeholder="Search by name, ID or department...">
-		<table id="employee-table">
-			<thead>
-				<tr>
-					<th>Name</th>
-					<th>Employee ID</th>
-					<th>Department</th>
-					<th>Updated</th>
-					<th></th>
-				</tr>
-			</thead>
-			<tbody id="employee-table-body"></tbody>
-		</table>
-		<p class="hint" id="empty-message">No employees saved yet.</p>
+		<div id="table-wrap">
+			<table id="employee-table">
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Employee ID</th>
+						<th>Department</th>
+						<th>Updated</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody id="employee-table-body"></tbody>
+			</table>
+			<p class="hint" id="empty-message" hidden>No employees saved yet. Add one on the left to get started.</p>
+			<p class="field-error" id="list-error" hidden></p>
+		</div>
 		<div class="button-row">
 			<button type="button" id="btn-export" class="secondary">Export backup (.json)</button>
 			<label class="upload-btn secondary">
@@ -84,9 +102,21 @@
 				<input type="file" id="input-import" accept="application/json" hidden>
 			</label>
 		</div>
-		<p class="hint">Saved data lives in this browser only. Use "Export backup" now and then to keep a copy safe.</p>
 	</section>
 </main>
+
+<div id="toast-container" aria-live="polite"></div>
+
+<div id="confirm-overlay" class="overlay" hidden>
+	<div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+		<h3 id="confirm-title">Are you sure?</h3>
+		<p id="confirm-message"></p>
+		<div class="button-row">
+			<button type="button" id="confirm-cancel" class="secondary">Cancel</button>
+			<button type="button" id="confirm-ok" class="danger">Delete</button>
+		</div>
+	</div>
+</div>
 
 <script src="qrcodegen.js"></script>
 <script src="app.js"></script>
